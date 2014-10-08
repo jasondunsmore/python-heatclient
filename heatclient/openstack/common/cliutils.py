@@ -151,6 +151,7 @@ def print_list(objs, fields, formatters=None, sortby_index=0,
     :param field_labels: Labels to use in the heading of the table, default to
         fields.
     """
+    print("print_list")
     formatters = formatters or {}
     mixed_case_fields = mixed_case_fields or []
     field_labels = field_labels or fields
@@ -167,8 +168,10 @@ def print_list(objs, fields, formatters=None, sortby_index=0,
     pt.align = 'l'
 
     for o in objs:
+        print(o)
         row = []
         for field in fields:
+            print(field)
             if field in formatters:
                 row.append(formatters[field](o))
             else:
