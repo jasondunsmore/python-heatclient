@@ -117,6 +117,26 @@ def event_log_formatter(events):
     return "\n".join(event_log)
 
 
+def print_update_list(l, fields, formatters=None):
+    formatters = formatters or {}
+    pt = prettytable.PrettyTable(fields, caching=False, print_empty=False)
+    pt.align = 'l'
+
+    for change in l:
+        row = []
+        for field in fields:
+            field_name = field.lower().replace(' ', '_')
+            if field in formatters:
+                row.append(formatters[field](change.get(field_name, None)))
+            else:
+                row.append(change.get(field_name, None))
+
+        if None not in row:
+            pt.add_row(row)
+
+    print(pt.get_string())
+
+
 def find_resource(manager, name_or_id):
     """Helper for the _find_* methods."""
     # first try to get entity as integer id
