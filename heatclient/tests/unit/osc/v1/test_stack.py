@@ -32,6 +32,91 @@ class TestStack(orchestration_fakes.TestOrchestrationv1):
         self.stack_client = self.app.client_manager.orchestration.stacks
 
 
+class TestStackCreate(TestStack):
+
+    template_path = 'heatclient/tests/test_templates/empty.yaml'
+
+    defaults = {
+        'stack_name': 'my_stack',
+        'disable_rollback': True,
+        'parameters': {},
+        'template': {'heat_template_version': '2013-05-23'},
+        'files': {},
+        'environment': {}
+    }
+
+    def setUp(self):
+        super(TestStackCreate, self).setUp()
+        self.cmd = stack.CreateStack(self.app, None)
+        self.stack_client.create = mock.MagicMock(
+            return_value={'stack': {'id': '1234'}})
+        self.stack_client.get = mock.MagicMock(
+            return_value={'stack_status': 'create_complete'})
+        stack._authenticated_fetcher = mock.MagicMock()
+
+    def test_stack_create_defaults(self):
+        arglist = ['my_stack', '-t', self.template_path]
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**self.defaults)
+
+    def test_stack_create_rollback(self):
+        arglist = ['my_stack', '-t', self.template_path, '--enable-rollback']
+        kwargs = copy.deepcopy(self.defaults)
+        kwargs['disable_rollback'] = False
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**kwargs)
+
+    def test_stack_create_parameters(self):
+        template_path = ('/'.join(self.template_path.split('/')[:-1]) +
+                         '/parameters.yaml')
+        arglist = ['my_stack', '-t', template_path, '--parameter', 'p1=a',
+                   '--parameter', 'p2=6']
+        kwargs = copy.deepcopy(self.defaults)
+        kwargs['parameters'] = {'p1': 'a', 'p2': '6'}
+        kwargs['template']['parameters'] = {'p1': {'type': 'string'},
+                                            'p2': {'type': 'number'}}
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**kwargs)
+
+    def test_stack_create_tags(self):
+        arglist = ['my_stack', '-t', self.template_path, '--tags', 'tag1,tag2']
+        kwargs = copy.deepcopy(self.defaults)
+        kwargs['tags'] = 'tag1,tag2'
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**kwargs)
+
+    def test_stack_create_timeout(self):
+        arglist = ['my_stack', '-t', self.template_path, '--timeout', '60']
+        kwargs = copy.deepcopy(self.defaults)
+        kwargs['timeout_mins'] = 60
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**kwargs)
+
+    def test_stack_create_wait(self):
+        arglist = ['my_stack', '-t', self.template_path, '--wait']
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        self.cmd.take_action(parsed_args)
+
+        self.stack_client.create.assert_called_with(**self.defaults)
+        self.stack_client.get.assert_called_with(**{'stack_id': '1234'})
+
+
 class TestStackShow(TestStack):
 
     scenarios = [
