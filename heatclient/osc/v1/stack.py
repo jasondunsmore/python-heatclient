@@ -20,6 +20,7 @@ from cliff import show
 from openstackclient.common import exceptions as exc
 from openstackclient.common import parseractions
 from openstackclient.common import utils
+from oslo_utils import strutils
 
 from heatclient.common import http
 from heatclient.common import template_utils
@@ -161,6 +162,166 @@ class CreateStack(show.ShowOne):
                 raise exc.CommandError(msg)
 
         return _show_stack(client, stack['id'], format='table', short=True)
+
+
+class UpdateStack(show.ShowOne):
+    '''Update a stack.'''
+
+    log = logging.getLogger(__name__ + '.UpdateStack')
+
+    def get_parser(self, prog_name):
+        parser = super(UpdateStack, self).get_parser(prog_name)
+        parser.add_argument(
+            '-t', '--template', metavar='<FILE or URL>',
+            help=_('Path to the template.')
+        )
+        parser.add_argument(
+            '-e', '--environment', metavar='<FILE or URL>',
+            action='append',
+            help=_('Path to the environment. Can be specified multiple times.')
+        )
+        parser.add_argument(
+            '--pre-update', metavar='<RESOURCE>', default=None,
+            action='append',
+            help=_('Name of a resource to set a pre-update hook to. Resources '
+                   'in nested stacks can be set using slash as a separator: '
+                   'nested_stack/another/my_resource. You can use wildcards '
+                   'to match multiple stacks or resources: '
+                   'nested_stack/an*/*_resource. This can be specified '
+                   'multiple times')
+        )
+        parser.add_argument(
+            '--timeout', metavar='<TIMEOUT>', type=int,
+            help=_('Stack update timeout in minutes.')
+        )
+        parser.add_argument(
+            '--rollback', default=None, metavar='<VALUE>',
+            help=_('Set rollback on update failure. '
+                   'Values %(true)s  set rollback to enabled. '
+                   'Values %(false)s set rollback to disabled. '
+                   'Default is to use the value of existing stack to be '
+                   'updated.') % {'true': strutils.TRUE_STRINGS,
+                                  'false': strutils.FALSE_STRINGS}
+        )
+        parser.add_argument(
+            '--dry-run', default=False, action="store_true",
+            help=_('Do not actually perform the stack update, but show what '
+                   'would be changed')
+        )
+        parser.add_argument(
+            '--parameter', metavar='<KEY1=VALUE>',
+            help=_('Parameter values used to create the stack. '
+                   'This can be specified multiple times'),
+            action='append'
+        )
+        parser.add_argument(
+            '--parameter-file', metavar='<KEY=FILE>',
+            help=_('Parameter values from file used to create the stack. '
+                   'This can be specified multiple times. Parameter value '
+                   'would be the content of the file'),
+            action='append'
+        )
+        parser.add_argument(
+            '-x', '--existing', default=False, action="store_true",
+            help=_('Re-use the template, parameters and environment of the '
+                   'current stack. If the template argument is omitted then '
+                   'the existing template is used. If no %(env_arg)s is '
+                   'specified then the existing environment is used. '
+                   'Parameters specified in %(arg)s will patch over the '
+                   'existing values in the current stack. Parameters omitted '
+                   'will keep the existing values.') % {
+                       'arg': '--parameter', 'env_arg': '--environment'}
+        )
+        parser.add_argument(
+            '--clear-parameter', metavar='<PARAMETER>',
+            help=_('Remove the parameters from the set of parameters of '
+                   'current stack for the %(cmd)s. The default value in the '
+                   'template will be used. This can be specified multiple '
+                   'times.') % {'cmd': 'stack-update'},
+            action='append'
+        )
+        parser.add_argument(
+            'id', metavar='<NAME or ID>',
+            help=_('Name or ID of stack to update.')
+        )
+        parser.add_argument(
+            '--tags', metavar='<TAG1,TAG2>',
+            help=_('An updated list of tags to associate with the stack.')
+        )
+
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug('take_action(%s)', parsed_args)
+
+        client = self.app.client_manager.orchestration
+
+        tpl_files, template = template_utils.process_template_path(
+            parsed_args.template,
+            object_request=_authenticated_fetcher(client),
+            existing=parsed_args.existing)
+
+        env_files, env = (
+            template_utils.process_multiple_environments_and_files(
+                env_paths=parsed_args.environment))
+
+        parameters = heat_utils.format_all_parameters(
+            parsed_args.parameter,
+            parsed_args.parameter_file,
+            parsed_args.template)
+
+        if parsed_args.pre_update:
+            template_utils.hooks_to_env(env, parsed_args.pre_update,
+                                        'pre-update')
+
+        fields = {
+            'stack_id': parsed_args.id,
+            'parameters': parameters,
+            'existing': parsed_args.existing,
+            'template': template,
+            'files': dict(list(tpl_files.items()) + list(env_files.items())),
+            'environment': env
+        }
+
+        if parsed_args.tags:
+            fields['tags'] = parsed_args.tags
+        if parsed_args.timeout:
+            fields['timeout_mins'] = parsed_args.timeout
+        if parsed_args.clear_parameter:
+            fields['clear_parameters'] = list(parsed_args.clear_parameter)
+
+        if parsed_args.rollback is not None:
+            try:
+                rollback = strutils.bool_from_string(parsed_args.rollback,
+                                                     strict=True)
+            except ValueError as ex:
+                raise exc.CommandError(ex)
+            else:
+                fields['disable_rollback'] = not(rollback)
+
+        if parsed_args.dry_run is True:
+            resource_changes = client.stacks.preview_update(**fields)
+
+            formatters = {
+                'resource_identity': heat_utils.json_formatter
+            }
+
+            fields = ['state', 'resource_name', 'resource_type',
+                      'resource_identity']
+
+            for k in resource_changes.get("resource_changes", {}).keys():
+                for i in range(len(resource_changes["resource_changes"][k])):
+                    resource_changes["resource_changes"][k][i]['state'] = k
+
+            heat_utils.print_update_list(
+                sum(resource_changes["resource_changes"].values(), []),
+                fields,
+                formatters=formatters
+            )
+            return
+
+        client.stacks.update(**fields)
+        return _show_stack(client, parsed_args.id, format='table', short=True)
 
 
 class ShowStack(show.ShowOne):
