@@ -20,6 +20,7 @@ from cliff import show
 from openstackclient.common import exceptions as exc
 from openstackclient.common import parseractions
 from openstackclient.common import utils
+from oslo_utils import strutils
 
 from heatclient.common import http
 from heatclient.common import template_utils
@@ -161,6 +162,108 @@ class CreateStack(show.ShowOne):
                 raise exc.CommandError(msg)
 
         return _show_stack(client, stack['id'], format='table', short=True)
+
+
+class UpdateStack(show.ShowOne):
+    '''Update a stack.'''
+
+    log = logging.getLogger(__name__ + '.UpdateStack')
+
+    def get_parser(self, prog_name):
+        parser = super(UpdateStack, self).get_parser(prog_name)
+        parser.add_argument(
+            '-f', '--template-file', metavar='<FILE>',
+           help=_('Path to the template.')
+        )
+        parser.add_argument(
+            '-e', '--environment-file', metavar='<FILE or URL>',
+            help=_('Path to the environment, it can be specified '
+                   'multiple times.'),
+            action='append'
+        )
+        parser.add_argument(
+            '--pre-update', metavar='<RESOURCE>', default=None,
+            action='append',
+            help=_('Name of a resource to set a pre-update hook to. Resources '
+                   'in nested stacks can be set using slash as a separator: '
+                   'nested_stack/another/my_resource. You can use wildcards '
+                   'to match multiple stacks or resources: '
+                   'nested_stack/an*/*_resource. This can be specified '
+                   'multiple times')
+        )
+        parser.add_argument(
+            '-u', '--template-url', metavar='<URL>', help=_('URL of template.')
+        )
+        parser.add_argument(
+            '-o', '--template-object', metavar='<URL>',
+            help=_('URL to retrieve template object (e.g. from swift).')
+        )
+        parser.add_argument(
+            '-t', '--timeout', metavar='<TIMEOUT>', type=int,
+           help=_('Stack update timeout in minutes.')
+        )
+        parser.add_argument(
+            '-r', '--enable-rollback', default=False, action="store_true",
+            help=_('DEPRECATED! Use %(arg)s argument instead. '
+                   'Enable rollback on stack update failure. '
+                   'NOTE: default behavior is now to use the rollback value '
+                   'of existing stack.') % {'arg': '--rollback'}
+        )
+        parser.add_argument(
+            '--rollback', default=None, metavar='<VALUE>',
+            help=_('Set rollback on update failure. '
+                   'Values %(true)s  set rollback to enabled. '
+                   'Values %(false)s set rollback to disabled. '
+                   'Default is to use the value of existing stack to be '
+                   'updated.') % {'true': strutils.TRUE_STRINGS,
+                                  'false': strutils.FALSE_STRINGS}
+        )
+        parser.add_argument(
+            '-y', '--dry-run', default=False, action="store_true",
+            help=_('Do not actually perform the stack update, but show what '
+                   'would be changed')
+        )
+        parser.add_argument(
+            '-P', '--parameters', metavar='<KEY1=VALUE1;KEY2=VALUE2...>',
+            help=_('Parameter values used to create the stack. '
+                   'This can be specified multiple times, or once with '
+                   'parameters separated by a semicolon.'),
+            action='append'
+        )
+        parser.add_argument(
+            '-Pf', '--parameter-file', metavar='<KEY=FILE>',
+            help=_('Parameter values from file used to create the stack. '
+                   'This can be specified multiple times. Parameter value '
+                   'would be the content of the file'),
+            action='append'
+        )
+        parser.add_argument(
+            '-x', '--existing', default=False, action="store_true",
+            help=_('Re-use the template, parameters and environment of the '
+                   'current stack. If the template argument is omitted then '
+                   'the existing template is used. If no %(env_arg)s is '
+                   'specified then the existing environment is used. '
+                   'Parameters specified in %(arg)s will patch over the '
+                   'existing values in the current stack. Parameters omitted '
+                   'will keep the existing values.') % {
+                       'arg': '--parameters', 'env_arg': '--environment-file'}
+        )
+        parser.add_argument(
+            '-c', '--clear-parameter', metavar='<PARAMETER>',
+            help=_('Remove the parameters from the set of parameters of '
+                   'current stack for the %(cmd)s. The default value in the '
+                   'template will be used. This can be specified multiple '
+                   'times.') % {'cmd': 'stack-update'},
+            action='append'
+        )
+        parser.add_argument(
+            'id', metavar='<NAME or ID>',
+            help=_('Name or ID of stack to update.')
+        )
+        parser.add_argument(
+            '--tags', metavar='<TAG1,TAG2>',
+           help=_('An updated list of tags to associate with the stack.')
+        )
 
 
 class ShowStack(show.ShowOne):
