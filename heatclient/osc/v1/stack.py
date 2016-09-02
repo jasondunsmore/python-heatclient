@@ -103,6 +103,12 @@ class CreateStack(command.ShowOne):
                    'would be created')
         )
         parser.add_argument(
+            '--ignore-unknown-parameters',
+            action='store_true',
+            help=_('Ignore unknown template parameters instead of failing '
+                   'stack validation')
+        )
+        parser.add_argument(
             'name',
             metavar='<stack-name>',
             help=_('Name of the stack to create')
@@ -151,6 +157,9 @@ class CreateStack(command.ShowOne):
             fields['tags'] = parsed_args.tags
         if parsed_args.timeout:
             fields['timeout_mins'] = parsed_args.timeout
+        ignore_unknown = parsed_args.ignore_unknown_parameters
+        if ignore_unknown:
+            fields['ignore_unknown_parameters'] = ignore_unknown
 
         if parsed_args.dry_run:
             stack = client.stacks.preview(**fields)
@@ -261,6 +270,12 @@ class UpdateStack(command.ShowOne):
             action='append'
         )
         parser.add_argument(
+            '--ignore-unknown-parameters',
+            action='store_true',
+            help=_('Ignore unknown template parameters instead of failing '
+                   'stack validation')
+        )
+        parser.add_argument(
             'stack', metavar='<stack>',
             help=_('Name or ID of stack to update')
         )
@@ -315,6 +330,9 @@ class UpdateStack(command.ShowOne):
             fields['timeout_mins'] = parsed_args.timeout
         if parsed_args.clear_parameter:
             fields['clear_parameters'] = list(parsed_args.clear_parameter)
+        ignore_unknown = parsed_args.ignore_unknown_parameters
+        if ignore_unknown:
+            fields['ignore_unknown_parameters'] = ignore_unknown
 
         if parsed_args.rollback:
             rollback = parsed_args.rollback.strip().lower()
