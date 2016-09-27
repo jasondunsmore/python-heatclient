@@ -192,6 +192,35 @@ class TestEventList(TestEvent):
         self.event_client.list.assert_called_with(**self.defaults)
         self.assertEqual(self.fields, columns)
 
+    @mock.patch('osc_lib.utils.sort_items')
+    def test_event_list_sort_multiple(self, mock_sort_items):
+        arglist = ['my_stack', '--sort', 'resource_name:desc',
+                   '--sort', 'id:asc', '--format', 'table']
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        mock_event = self.MockEvent()
+        mock_sort_items.return_value = [mock_event]
+        columns, data = self.cmd.take_action(parsed_args)
+
+        mock_sort_items.assert_called_with(mock.ANY,
+                                           "resource_name:desc,id:asc")
+        self.event_client.list.assert_called_with(**self.defaults)
+        self.assertEqual(self.fields, columns)
+
+    @mock.patch('osc_lib.utils.sort_items')
+    def test_event_list_sort_default_key(self, mock_sort_items):
+        arglist = ['my_stack', '--sort', ':desc',
+                   '--format', 'table']
+        parsed_args = self.check_parser(self.cmd, arglist, [])
+
+        mock_event = self.MockEvent()
+        mock_sort_items.return_value = [mock_event]
+        columns, data = self.cmd.take_action(parsed_args)
+
+        mock_sort_items.assert_called_with(mock.ANY, "event_time:desc")
+        self.event_client.list.assert_called_with(**self.defaults)
+        self.assertEqual(self.fields, columns)
+
     @mock.patch('time.sleep')
     def test_event_list_follow(self, sleep):
         sleep.side_effect = [None, KeyboardInterrupt()]
